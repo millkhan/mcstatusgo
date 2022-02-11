@@ -1,7 +1,7 @@
 # mcstatusgo
 `mcstatusgo` is a pure Go Minecraft service status checker for Java edition Minecraft servers.
 
-`mcstatusgo` supports requesting information through the `status` and `query` protocol. 
+`mcstatusgo` supports requesting information through the `status` and `query` protocols. 
 
 Usage
 -----
@@ -16,17 +16,21 @@ import (
 )
 
 func main() {
-	status, err := mcstatusgo.Status("mc.hypixel.net", 25565, time.Second*10, time.Second*5)
-	if err != nil {
-		panic(err)
-	}
-	fmt.Printf("Hypixel player count: %d\n", status.Players.Max)
+	// Experiment with both the initialTimeout and ioTimeout values to see what works best.
+	initialTimeout := time.Second * 10
+	ioTimeout := time.Second * 5
 
-	query, err := mcstatusgo.Query("mc.piglin.org", 25565, time.Second*10, time.Second*10)
+	status, err := mcstatusgo.Status("mc.piglin.org", 25565, initialTimeout, ioTimeout)
 	if err != nil {
 		panic(err)
 	}
-	fmt.Printf("Piglin server version: %s\n", query.Version.Name)
+	fmt.Printf("Player count: %d\n", status.Players.Max)
+
+	query, err := mcstatusgo.Query("mc.piglin.org", 25565, initialTimeout, ioTimeout)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Printf("Server version: %s\n", query.Version.Name)
 }
 ```
 
@@ -36,8 +40,8 @@ mcstatusgo can be installed easily using the following command:
 ```bash
 go get github.com/millkhan/mcstatusgo
 ```
+
 License
 -------
-
 `mcstatusgo` is licensed under the MIT License.
 Check [LICENSE](LICENSE) for more information.
