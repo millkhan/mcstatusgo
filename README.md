@@ -3,8 +3,7 @@
 
 `mcstatusgo` supports requesting information through the `status` and `query` protocols. 
 
-Usage
------
+## Usage
 ```go
 package main
 
@@ -35,13 +34,11 @@ func main() {
 ```
 
 ## Installation
-----------
 mcstatusgo can be installed easily using the following command:
 ```bash
 go get github.com/millkhan/mcstatusgo
 ```
 
-License
--------
+## License
 `mcstatusgo` is licensed under the MIT License.
 Check [LICENSE](LICENSE) for more information.
