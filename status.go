@@ -1,6 +1,7 @@
 package mcstatusgo
 
 import (
+	"bytes"
 	"encoding/binary"
 	"encoding/json"
 	"errors"
@@ -19,8 +20,12 @@ const (
 	nextState byte = 1
 )
 
-// requestPacket is the packet sent after the handshake to illicit a status response from the server.
-var requestPacket []byte = []byte{nextState, packetID}
+var (
+	// requestPacket is the packet sent after the handshake to elicit a status response from the server.
+	requestPacket []byte = []byte{nextState, packetID}
+	// pingPacket is sent to elicit an identical pong from the server to calculate latency.
+	pingPacket []byte = []byte{9, 1, 7, 7, 7, 7, 7, 7, 7, 7}
+)
 
 // Errors.
 var (
@@ -30,6 +35,8 @@ var (
 	ErrInvalidSizeInfo error = errors.New("invalid status response: JSON size information is invalid")
 	// ErrLargeVarInt is returned when a varint sent by the server is above the 5 bytes size limit.
 	ErrLargeVarInt error = errors.New("invalid status response: varint sent by server exceeds size limit")
+	// ErrInvalidPong is returned when the pong response received from the server does not match the ping packet sent to it.
+	ErrInvalidPong error = errors.New("invalid status response: pong sent by server does not match ping packet")
 )
 
 // ErrMissingInformation is used by both protocols and contains the specific value left out from the response.
@@ -51,6 +58,9 @@ type StatusResponse struct {
 
 	// Port contains the server's port used for communication.
 	Port uint16
+
+	// Latency contains the duration of time waited for the pong.
+	Latency time.Duration
 
 	// Description contains a pretty-print JSON string of the server description.
 	Description string `json:"-"`
@@ -113,14 +123,31 @@ func Status(server string, port uint16, initialConnectionTimeout time.Duration, 
 		return StatusResponse{}, err
 	}
 
+	latency, err := calculateLatency(con, ioTimeout)
+	if err != nil {
+		return StatusResponse{}, err
+	}
+
 	con.Close()
 
-	status, err := packageStatusResponse(serverIP, port, response)
+	status, err := packageStatusResponse(serverIP, port, latency, response)
 	if err != nil {
 		return StatusResponse{}, err
 	}
 
 	return status, nil
+}
+
+// Ping serves as a convenience wrapper over Status to retrieve the server latency.
+//
+// Retrieving the latency from a StatusResponse provides the same function.
+func Ping(server string, port uint16, initialConnectionTimeout time.Duration, ioTimeout time.Duration) (time.Duration, error) {
+	status, err := Status(server, port, initialConnectionTimeout, ioTimeout)
+	if err != nil {
+		return -1, err
+	}
+
+	return status.Latency, nil
 }
 
 // resetConnection sends an RST packet to terminate the connection immediately.
@@ -130,14 +157,18 @@ func resetConnection(con net.Conn) {
 	TCPCon.Close()
 }
 
+// setDeadline is used by both protocols for setting the deadline (duration waited) for io operations.
+func setDeadline(con *net.Conn, timeout time.Duration) {
+	timeDeadline := time.Now().Add(timeout)
+	(*con).SetDeadline(timeDeadline)
+}
+
 // initiateStatusRequest handles sending the handshake and request packets.
 func initiateStatusRequest(con net.Conn, timeout time.Duration, server string, port uint16) error {
 	handshake := createStatusHandshakePacket(server, port)
 	completedRequestPacket := append(handshake, requestPacket...)
 
-	timeDeadline := time.Now().Add(timeout)
-	con.SetWriteDeadline(timeDeadline)
-
+	setDeadline(&con, timeout)
 	_, err := con.Write(completedRequestPacket)
 
 	return err
@@ -205,10 +236,8 @@ func readStatusResponse(con net.Conn, timeout time.Duration) ([]byte, error) {
 
 	response := []byte{}
 
-	timeDeadline := time.Now().Add(timeout)
-	con.SetReadDeadline(timeDeadline)
-
 	// Keep receiving bytes until the full message is received.
+	setDeadline(&con, timeout)
 	for len(response) < responseSize {
 		recvBuffer := make([]byte, 4096)
 		bytesRead, err := con.Read(recvBuffer)
@@ -226,9 +255,8 @@ func readStatusResponse(con net.Conn, timeout time.Duration) ([]byte, error) {
 // readResponseSize reads and parses the varint that prepends the server's response which contains the length of the response.
 func readResponseSize(con net.Conn, timeout time.Duration) (int, error) {
 	varInt := []byte{}
-	timeDeadline := time.Now().Add(timeout)
-	con.SetReadDeadline(timeDeadline)
 
+	setDeadline(&con, timeout)
 	for {
 		recvBuffer := make([]byte, 1)
 		_, err := con.Read(recvBuffer)
@@ -269,11 +297,37 @@ func readVarInt(varInt []byte) (int, error) {
 	return number, nil
 }
 
+// calculateLatency measures the duration of time waited for a pong from the server.
+func calculateLatency(con net.Conn, timeout time.Duration) (time.Duration, error) {
+	setDeadline(&con, timeout)
+	_, err := con.Write(pingPacket)
+	if err != nil {
+		return -1, err
+	}
+
+	setDeadline(&con, timeout)
+	pong := make([]byte, 10)
+
+	startTime := time.Now()
+	_, err = con.Read(pong)
+	if err != nil {
+		return -1, err
+	}
+	latency := time.Since(startTime)
+
+	if !bytes.Equal(pingPacket, pong) {
+		return -1, ErrInvalidPong
+	}
+
+	return latency, nil
+}
+
 // packageStatusResponse formats, parses, and packages the response into status.
-func packageStatusResponse(serverIP string, port uint16, response []byte) (StatusResponse, error) {
+func packageStatusResponse(serverIP string, port uint16, latency time.Duration, response []byte) (StatusResponse, error) {
 	status := StatusResponse{}
 	status.IP = serverIP
 	status.Port = port
+	status.Latency = latency
 
 	formatedResponse, err := formatStatusResponse(response)
 	if err != nil {
