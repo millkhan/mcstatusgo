@@ -24,9 +24,9 @@ const (
 var (
 	// magicBytes must prepend every message sent to the server.
 	magicBytes []byte = []byte{0xFE, 0xFD}
-	// fullStatPadding is added at the end of the request packet to indicate a request for full query information.
-	fullStatPadding []byte = []byte{0, 0, 0, 0}
-	// playerSplit is the token used to split the response into two parts for parsing.
+	// fullQueryPadding is added at the end of the request packet to indicate a request for full query information.
+	fullQueryPadding []byte = []byte{0, 0, 0, 0}
+	// playerSplit is the token used to split the full query response into two parts for parsing.
 	playerToken []byte = []byte{0, 1, 112, 108, 97, 121, 101, 114, 95, 0, 0}
 )
 
@@ -38,12 +38,12 @@ var (
 	ErrShortChallengeToken error = errors.New("invalid query response: challenge token is too small")
 	// ErrAbsentChallengeTokenNullTerminator is returned when the challenge token doesn't contain a null-terminator at the end.
 	ErrAbsentChallengeTokenNullTerminator = errors.New("invalid query response: challenge token doesn't contain a null-terminator")
-	// ErrAbsentPlayerToken is returned when the player token used to split the response into two parts for parsing isn't present in the response.
+	// ErrAbsentPlayerToken is returned when the player token used to split the full query response into two parts for parsing isn't present.
 	ErrAbsentPlayerToken error = errors.New("invalid query response: player token not in response")
 )
 
-// QueryResponse contains the information from the server query response.
-type QueryResponse struct {
+// FullQueryResponse contains the information from the full query request.
+type FullQueryResponse struct {
 	// IP contains the server's IP.
 	IP string
 
@@ -87,17 +87,17 @@ type QueryResponse struct {
 	}
 }
 
-// Query requests detailed server information from a Minecraft server.
+// FullQuery requests detailed server information from a Minecraft server.
 //
 // The Minecraft server must have the "enable-query" property set to true.
 //
-// If a valid response is received, a QueryResponse is returned.
-func Query(server string, port uint16, initialConnectionTimeout time.Duration, ioTimeout time.Duration) (QueryResponse, error) {
+// If a valid response is received, a FullQueryResponse is returned.
+func FullQuery(server string, port uint16, initialConnectionTimeout time.Duration, ioTimeout time.Duration) (FullQueryResponse, error) {
 	serverAndPort := fmt.Sprintf("%s:%d", server, port)
 
 	con, err := net.DialTimeout("udp", serverAndPort, initialConnectionTimeout)
 	if err != nil {
-		return QueryResponse{}, err
+		return FullQueryResponse{}, err
 	}
 	// If the connection closes normally, this line will run but not do anything.
 	defer con.Close()
@@ -106,22 +106,22 @@ func Query(server string, port uint16, initialConnectionTimeout time.Duration, i
 
 	err = initiateQueryRequest(con, ioTimeout)
 	if err != nil {
-		return QueryResponse{}, err
+		return FullQueryResponse{}, err
 	}
 
 	response, err := readQueryResponse(con, ioTimeout)
 	if err != nil {
-		return QueryResponse{}, err
+		return FullQueryResponse{}, err
 	}
 
 	con.Close()
 
-	query, err := packageQueryResponse(serverIP, port, response)
+	fullQuery, err := packageFullQueryResponse(serverIP, port, response)
 	if err != nil {
-		return QueryResponse{}, err
+		return FullQueryResponse{}, err
 	}
 
-	return query, nil
+	return fullQuery, nil
 }
 
 // initiateQueryRequest handles sending the handshake and request packets.
@@ -134,7 +134,7 @@ func initiateQueryRequest(con net.Conn, timeout time.Duration) error {
 		return err
 	}
 
-	err = sendFullStatRequest(con, timeout, sessionID, challengeToken)
+	err = sendFullQueryRequest(con, timeout, sessionID, challengeToken)
 	if err != nil {
 		return err
 	}
@@ -244,28 +244,28 @@ func cleanChallengeToken(potentialChallengeToken []byte) ([]byte, error) {
 	return cleanedToken, nil
 }
 
-// sendFullStatRequest sends the full stat request packet to the server.
-func sendFullStatRequest(con net.Conn, timeout time.Duration, sessionID []byte, challengeToken []byte) error {
-	fullStatRequestPacket := createFullStatRequestPacket(sessionID, challengeToken)
+// sendFullQueryRequest sends the full query request packet to the server.
+func sendFullQueryRequest(con net.Conn, timeout time.Duration, sessionID []byte, challengeToken []byte) error {
+	fullQueryRequestPacket := createFullQueryRequestPacket(sessionID, challengeToken)
 
 	timeDeadline := time.Now().Add(timeout)
 	con.SetWriteDeadline(timeDeadline)
 
-	_, err := con.Write(fullStatRequestPacket)
+	_, err := con.Write(fullQueryRequestPacket)
 	return err
 }
 
-// createFullStatRequestPacket uses the information received from the handshake to create the full stat packet.
-func createFullStatRequestPacket(sessionID []byte, challengeToken []byte) []byte {
-	fullStatRequestPacket := append(magicBytes, statByte)
-	fullStatRequestPacket = append(fullStatRequestPacket, sessionID...)
-	fullStatRequestPacket = append(fullStatRequestPacket, challengeToken...)
-	fullStatRequestPacket = append(fullStatRequestPacket, fullStatPadding...)
+// createFullQueryRequestPacket uses the information received from the handshake to create the full query request packet.
+func createFullQueryRequestPacket(sessionID []byte, challengeToken []byte) []byte {
+	fullQueryRequestPacket := append(magicBytes, statByte)
+	fullQueryRequestPacket = append(fullQueryRequestPacket, sessionID...)
+	fullQueryRequestPacket = append(fullQueryRequestPacket, challengeToken...)
+	fullQueryRequestPacket = append(fullQueryRequestPacket, fullQueryPadding...)
 
-	return fullStatRequestPacket
+	return fullQueryRequestPacket
 }
 
-// readQueryResponse receives the full stat request.
+// readQueryResponse receives the query response.
 func readQueryResponse(con net.Conn, timeout time.Duration) ([]byte, error) {
 	timeDeadline := time.Now().Add(timeout)
 	con.SetReadDeadline(timeDeadline)
@@ -280,16 +280,16 @@ func readQueryResponse(con net.Conn, timeout time.Duration) ([]byte, error) {
 	return response, nil
 }
 
-// packageQueryResponse parses and packages the response into query.
-func packageQueryResponse(serverIP string, port uint16, response []byte) (QueryResponse, error) {
-	query := QueryResponse{}
-	query.IP = serverIP
-	query.Port = port
+// packageFullQueryResponse parses and packages the response into fullQuery.
+func packageFullQueryResponse(serverIP string, port uint16, response []byte) (FullQueryResponse, error) {
+	fullQuery := FullQueryResponse{}
+	fullQuery.IP = serverIP
+	fullQuery.Port = port
 
-	// Split the response using the player token into a key value section and a null-terminated string section containing the players online.
+	// Split the response using the player token into a key value section and a null-terminated string section containing the players online for parsing.
 	splitResponse := bytes.Split(response, playerToken)
 	if len(splitResponse) != 2 {
-		return QueryResponse{}, ErrAbsentPlayerToken
+		return FullQueryResponse{}, ErrAbsentPlayerToken
 	}
 
 	keyValueSection := splitResponse[0]
@@ -297,25 +297,25 @@ func packageQueryResponse(serverIP string, port uint16, response []byte) (QueryR
 
 	responseMapBytes, err := parseKeyValueSection(keyValueSection)
 	if err != nil {
-		return QueryResponse{}, err
+		return FullQueryResponse{}, err
 	}
 
 	err = validateQueryResponse(responseMapBytes)
 	if err != nil {
-		return QueryResponse{}, err
+		return FullQueryResponse{}, err
 	}
 
-	err = packageKeyValueSection(responseMapBytes, &query)
+	err = packageKeyValueSection(responseMapBytes, &fullQuery)
 	if err != nil {
-		return QueryResponse{}, err
+		return FullQueryResponse{}, err
 	}
 
-	packagePlayerSection(playerSection, &query)
+	packagePlayerSection(playerSection, &fullQuery)
 
-	return query, nil
+	return fullQuery, nil
 }
 
-// parseKeyValueSection parses the key mapped values from the received response into a JSON []byte.
+// parseKeyValueSection parses the key mapped values from the full query response into a JSON []byte.
 func parseKeyValueSection(keyValueSection []byte) ([]byte, error) {
 	if len(keyValueSection) < 16 {
 		return nil, ErrShortQueryResponse
@@ -381,8 +381,8 @@ func validateQueryResponse(responseMapBytes []byte) error {
 	return nil
 }
 
-// packageKeyValueSection manually unmarshals and packages the key value section into query to preserve an identitical structure to StatusResponse{}.
-func packageKeyValueSection(responseMapBytes []byte, query *QueryResponse) error {
+// packageKeyValueSection manually unmarshals and packages the key value section into fullQuery to preserve an identitical structure to StatusResponse{}.
+func packageKeyValueSection(responseMapBytes []byte, fullQuery *FullQueryResponse) error {
 	var keyValueInfo struct {
 		Maxplayers, Numplayers                             int `json:",string"`
 		Hostname, Gametype, Game_id, Map, Version, Plugins string
@@ -393,20 +393,20 @@ func packageKeyValueSection(responseMapBytes []byte, query *QueryResponse) error
 		return err
 	}
 
-	query.Players.Max = keyValueInfo.Maxplayers
-	query.Players.Online = keyValueInfo.Numplayers
-	query.Description = keyValueInfo.Hostname
-	query.GameType = keyValueInfo.Gametype
-	query.GameID = keyValueInfo.Game_id
-	query.MapName = keyValueInfo.Map
-	query.Version.Name = keyValueInfo.Version
-	packagePluginSection(keyValueInfo.Plugins, query)
+	fullQuery.Players.Max = keyValueInfo.Maxplayers
+	fullQuery.Players.Online = keyValueInfo.Numplayers
+	fullQuery.Description = keyValueInfo.Hostname
+	fullQuery.GameType = keyValueInfo.Gametype
+	fullQuery.GameID = keyValueInfo.Game_id
+	fullQuery.MapName = keyValueInfo.Map
+	fullQuery.Version.Name = keyValueInfo.Version
+	packagePluginSection(keyValueInfo.Plugins, fullQuery)
 
 	return nil
 }
 
-// packagePluginSection parses and packages the plugin section into query.
-func packagePluginSection(pluginSection string, query *QueryResponse) {
+// packagePluginSection parses and packages the plugin section into fullQuery.
+func packagePluginSection(pluginSection string, fullQuery *FullQueryResponse) {
 	// The server is vanilla or doesn't send plugin information.
 	if len(pluginSection) == 0 {
 		return
@@ -417,7 +417,7 @@ func packagePluginSection(pluginSection string, query *QueryResponse) {
 
 	// Only the server mod name was in the response.
 	if len(pluginSectionSplit) == 1 {
-		query.ModInfo.Type = serverModName
+		fullQuery.ModInfo.Type = serverModName
 		return
 	}
 
@@ -447,12 +447,12 @@ func packagePluginSection(pluginSection string, query *QueryResponse) {
 			pluginList = append(pluginList, completedPlugin)
 		}
 	}
-	query.ModInfo.Type = serverModName
-	query.ModInfo.ModList = pluginList
+	fullQuery.ModInfo.Type = serverModName
+	fullQuery.ModInfo.ModList = pluginList
 }
 
-// packagePlayerSection parses and packages the player section into query.
-func packagePlayerSection(playerSection []byte, query *QueryResponse) {
+// packagePlayerSection parses and packages the player section into fullQuery.
+func packagePlayerSection(playerSection []byte, fullQuery *FullQueryResponse) {
 	if len(playerSection) < 4 {
 		return
 	}
@@ -474,5 +474,5 @@ func packagePlayerSection(playerSection []byte, query *QueryResponse) {
 			playerString = append(playerString, currentByte)
 		}
 	}
-	query.Players.PlayerList = playerList
+	fullQuery.Players.PlayerList = playerList
 }
