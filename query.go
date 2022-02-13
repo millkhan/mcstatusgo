@@ -42,6 +42,69 @@ var (
 	ErrAbsentPlayerToken error = errors.New("invalid query response: player token not in response")
 )
 
+// BasicQueryResponse contains the information from the basic query request.
+type BasicQueryResponse struct {
+	// IP contains the server's IP.
+	IP string
+
+	// Port contains the server's port used for communication.
+	Port uint16
+
+	// Description contains the MOTD of the server.
+	Description string
+
+	// Gametype contains a string which is usually 'SMP'.
+	GameType string
+
+	// MapName contains the name of the map running on the server.
+	MapName string
+
+	Players struct {
+		// Max contains the maximum number of players the server supports.
+		Max int
+
+		// Online contains the current number of players on the server.
+		Online int
+	}
+}
+
+// BasicQuery requests basic server information from a Minecraft server.
+//
+// The Minecraft server must have the "enable-query" property set to true.
+//
+// If a valid response is received, a BasicQueryResponse is returned.
+func BasicQuery(server string, port uint16, initialConnectionTimeout time.Duration, ioTimeout time.Duration) (BasicQueryResponse, error) {
+	serverAndPort := fmt.Sprintf("%s:%d", server, port)
+
+	con, err := net.DialTimeout("udp", serverAndPort, initialConnectionTimeout)
+	if err != nil {
+		return BasicQueryResponse{}, err
+	}
+	// If the connection closes normally, this line will run but not do anything.
+	defer con.Close()
+
+	serverIP := strings.Split(con.RemoteAddr().String(), ":")[0]
+
+	err = initiateQueryRequest(con, ioTimeout, false)
+	if err != nil {
+		return BasicQueryResponse{}, err
+	}
+
+	response, err := readQueryResponse(con, ioTimeout)
+	if err != nil {
+		return BasicQueryResponse{}, err
+	}
+
+	con.Close()
+
+	basicQuery, err := packageBasicQueryResponse(serverIP, port, response)
+	if err != nil {
+		return BasicQueryResponse{}, err
+	}
+
+	return basicQuery, nil
+}
+
 // FullQueryResponse contains the information from the full query request.
 type FullQueryResponse struct {
 	// IP contains the server's IP.
@@ -104,7 +167,7 @@ func FullQuery(server string, port uint16, initialConnectionTimeout time.Duratio
 
 	serverIP := strings.Split(con.RemoteAddr().String(), ":")[0]
 
-	err = initiateQueryRequest(con, ioTimeout)
+	err = initiateQueryRequest(con, ioTimeout, true)
 	if err != nil {
 		return FullQueryResponse{}, err
 	}
@@ -125,7 +188,7 @@ func FullQuery(server string, port uint16, initialConnectionTimeout time.Duratio
 }
 
 // initiateQueryRequest handles sending the handshake and request packets.
-func initiateQueryRequest(con net.Conn, timeout time.Duration) error {
+func initiateQueryRequest(con net.Conn, timeout time.Duration, isFullQuery bool) error {
 	sessionID := createSessionID()
 	handshake := createQueryHandshakePacket(sessionID)
 
@@ -134,7 +197,7 @@ func initiateQueryRequest(con net.Conn, timeout time.Duration) error {
 		return err
 	}
 
-	err = sendFullQueryRequest(con, timeout, sessionID, challengeToken)
+	err = sendQueryRequest(con, timeout, sessionID, challengeToken, isFullQuery)
 	if err != nil {
 		return err
 	}
@@ -176,6 +239,7 @@ func readChallengeToken(con net.Conn, timeout time.Duration, handshake []byte) (
 	con.SetReadDeadline(timeDeadline)
 
 	potentialChallengeToken := make([]byte, 32)
+
 	numRead, err := con.Read(potentialChallengeToken)
 	if err != nil {
 		return nil, err
@@ -190,39 +254,41 @@ func readChallengeToken(con net.Conn, timeout time.Duration, handshake []byte) (
 	return challengeToken, nil
 }
 
-// parseChallengeToken parses the cleaned challenge token into an int represented in []byte.
+// parseChallengeToken parses the cleaned challenge token into an int contained in a []byte.
 func parseChallengeToken(potentialChallengeToken []byte) ([]byte, error) {
-	potentialChallengeToken, err := cleanChallengeToken(potentialChallengeToken)
+	challengeTokenString, err := cleanChallengeToken(potentialChallengeToken)
 	if err != nil {
 		return []byte{}, err
 	}
 
-	var challengeTokenInt int64
-	challengeTokenBytes := make([]byte, 4)
-	challengeTokenString := string(potentialChallengeToken)
+	var isNegativeChallengeToken bool
 
-	// If challenge token is negative.
+	// If challenge token is negative, remove the negative sign from the front and set bool.
 	if challengeTokenString[0] == '-' {
-		challengeTokenInt, err = strconv.ParseInt(challengeTokenString[1:], 10, 32)
-		if err != nil {
-			return []byte{}, err
-		}
-		challengeTokenInt *= -1
-	} else {
-		challengeTokenInt, err = strconv.ParseInt(challengeTokenString, 10, 32)
-		if err != nil {
-			return []byte{}, err
-		}
+		challengeTokenString = challengeTokenString[1:]
+		isNegativeChallengeToken = true
 	}
+
+	challengeTokenInt, err := strconv.ParseInt(challengeTokenString, 10, 32)
+	if err != nil {
+		return []byte{}, err
+	}
+
+	// Make challenge token negative.
+	if isNegativeChallengeToken {
+		challengeTokenInt *= -1
+	}
+
+	challengeTokenBytes := make([]byte, 4)
 	binary.BigEndian.PutUint32(challengeTokenBytes, uint32(challengeTokenInt))
 
 	return challengeTokenBytes, nil
 }
 
-// cleanChallengeToken formats and checks the received challenge token.
-func cleanChallengeToken(potentialChallengeToken []byte) ([]byte, error) {
+// cleanChallengeToken checks and formats the received challenge token.
+func cleanChallengeToken(potentialChallengeToken []byte) (string, error) {
 	if len(potentialChallengeToken) < 7 {
-		return nil, ErrShortChallengeToken
+		return "", ErrShortChallengeToken
 	}
 
 	// Remove Type and sessionID bytes from the beginning.
@@ -230,7 +296,7 @@ func cleanChallengeToken(potentialChallengeToken []byte) ([]byte, error) {
 
 	// Return an error if the challenge token doesn't have a null-terminator at the end.
 	if potentialChallengeToken[len(potentialChallengeToken)-1] != 0 {
-		return nil, ErrAbsentChallengeTokenNullTerminator
+		return "", ErrAbsentChallengeTokenNullTerminator
 	}
 
 	// Remove any lingering null-terminators.
@@ -241,26 +307,30 @@ func cleanChallengeToken(potentialChallengeToken []byte) ([]byte, error) {
 		}
 	}
 
-	return cleanedToken, nil
+	return string(cleanedToken), nil
 }
 
-// sendFullQueryRequest sends the full query request packet to the server.
-func sendFullQueryRequest(con net.Conn, timeout time.Duration, sessionID []byte, challengeToken []byte) error {
-	fullQueryRequestPacket := createFullQueryRequestPacket(sessionID, challengeToken)
+// sendQueryRequest sends the query request packet to the server.
+func sendQueryRequest(con net.Conn, timeout time.Duration, sessionID []byte, challengeToken []byte, isFullQuery bool) error {
+	queryRequestPacket := createQueryRequestPacket(sessionID, challengeToken, isFullQuery)
 
 	timeDeadline := time.Now().Add(timeout)
 	con.SetWriteDeadline(timeDeadline)
 
-	_, err := con.Write(fullQueryRequestPacket)
+	_, err := con.Write(queryRequestPacket)
 	return err
 }
 
-// createFullQueryRequestPacket uses the information received from the handshake to create the full query request packet.
-func createFullQueryRequestPacket(sessionID []byte, challengeToken []byte) []byte {
+// createQueryRequestPacket uses the information received from the handshake to create the full query request packet.
+func createQueryRequestPacket(sessionID []byte, challengeToken []byte, isFullQuery bool) []byte {
 	fullQueryRequestPacket := append(magicBytes, statByte)
 	fullQueryRequestPacket = append(fullQueryRequestPacket, sessionID...)
 	fullQueryRequestPacket = append(fullQueryRequestPacket, challengeToken...)
-	fullQueryRequestPacket = append(fullQueryRequestPacket, fullQueryPadding...)
+
+	// If full query, add the extra padding.
+	if isFullQuery {
+		fullQueryRequestPacket = append(fullQueryRequestPacket, fullQueryPadding...)
+	}
 
 	return fullQueryRequestPacket
 }
@@ -278,6 +348,68 @@ func readQueryResponse(con net.Conn, timeout time.Duration) ([]byte, error) {
 	response = response[0:bytesRead]
 
 	return response, nil
+}
+
+// packageBasicQueryResponse parses and packages the response into basicQuery.
+func packageBasicQueryResponse(serverIP string, port uint16, response []byte) (BasicQueryResponse, error) {
+	basicQuery := BasicQueryResponse{}
+	basicQuery.IP = serverIP
+	basicQuery.Port = port
+
+	err := parseBasicQueryResponse(response, &basicQuery)
+	if err != nil {
+		return BasicQueryResponse{}, err
+	}
+
+	return basicQuery, nil
+}
+
+// parseBasicQueryResponse parses the null-terminated values and packages them into basicQuery.
+func parseBasicQueryResponse(response []byte, basicQuery *BasicQueryResponse) error {
+	if len(response) < 5 {
+		return ErrShortQueryResponse
+	}
+
+	// Remove type and sessionID bytes from the front.
+	response = response[5:]
+
+	// Slice containing each null-terminated value.
+	responseSlice := []string{}
+
+	value := []byte{}
+	for _, currentByte := range response {
+		if currentByte == 0 {
+			responseSlice = append(responseSlice, string(value))
+			value = []byte{}
+		} else {
+			value = append(value, currentByte)
+		}
+	}
+
+	// Return an error if any of the required information is missing.
+	if len(responseSlice) < 5 {
+		return ErrShortQueryResponse
+	}
+
+	// Package first three string values.
+	basicQuery.Description = string(responseSlice[0])
+	basicQuery.GameType = string(responseSlice[1])
+	basicQuery.MapName = string(responseSlice[2])
+
+	// Convert and package the int values.
+	playersOnline, err := strconv.ParseInt(responseSlice[3], 10, 32)
+	if err != nil {
+		return err
+	}
+	basicQuery.Players.Online = int(playersOnline)
+
+	playersMax, err := strconv.ParseInt(responseSlice[4], 10, 32)
+	if err != nil {
+		return err
+	}
+	basicQuery.Players.Max = int(playersMax)
+
+	return nil
 }
 
 // packageFullQueryResponse parses and packages the response into fullQuery.
@@ -324,11 +456,14 @@ func parseKeyValueSection(keyValueSection []byte) ([]byte, error) {
 	// Remove type, sessionID, and padding bytes from the front.
 	keyValueSection = keyValueSection[16:]
 
+	// Key mapped values.
+	responseMap := make(map[string]string)
+
 	// Parse each key and its corresponding value and insert it into responseMap.
 	var currentValue []byte
 	var keyValue string
-	responseMap := make(map[string]string)
 	isKey := true
+
 	for _, currentByte := range keyValueSection {
 		// The current byte string being read has terminated.
 		if currentByte == 0 {
