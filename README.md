@@ -26,6 +26,12 @@ func main() {
 	}
 	fmt.Printf("Player count: %d\n", status.Players.Max)
 
+	basicQuery, err := mcstatusgo.BasicQuery("mc.piglin.org", 25565, initialTimeout, ioTimeout)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Printf("Map Name: %s\n", basicQuery.MapName)
+
 	fullQuery, err := mcstatusgo.FullQuery("mc.piglin.org", 25565, initialTimeout, ioTimeout)
 	if err != nil {
 		panic(err)
