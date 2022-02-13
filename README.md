@@ -52,7 +52,7 @@ func main() {
 
 ## Documentation
 
-https://pkg.go.dev/github.com/millkhan/mcstatusgo
+https://pkg.go.dev/github.com/millkhan/mcstatusgo/v2
 
 ## Installation
 
