@@ -26,11 +26,11 @@ func main() {
 	}
 	fmt.Printf("Player count: %d\n", status.Players.Max)
 
-	query, err := mcstatusgo.Query("mc.piglin.org", 25565, initialTimeout, ioTimeout)
+	fullQuery, err := mcstatusgo.FullQuery("mc.piglin.org", 25565, initialTimeout, ioTimeout)
 	if err != nil {
 		panic(err)
 	}
-	fmt.Printf("Server version: %s\n", query.Version.Name)
+	fmt.Printf("Server version: %s\n", fullQuery.Version.Name)
 }
 ```
 
