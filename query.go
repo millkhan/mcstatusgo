@@ -50,6 +50,9 @@ type BasicQueryResponse struct {
 	// Port contains the server's port used for communication.
 	Port uint16
 
+	// Latency contains the duration of time waited for the basic query response.
+	Latency time.Duration
+
 	// Description contains the MOTD of the server.
 	Description string
 
@@ -90,14 +93,14 @@ func BasicQuery(server string, port uint16, initialConnectionTimeout time.Durati
 		return BasicQueryResponse{}, err
 	}
 
-	response, err := readQueryResponse(con, ioTimeout)
+	response, latency, err := readQueryResponse(con, ioTimeout)
 	if err != nil {
 		return BasicQueryResponse{}, err
 	}
 
 	con.Close()
 
-	basicQuery, err := packageBasicQueryResponse(serverIP, port, response)
+	basicQuery, err := packageBasicQueryResponse(serverIP, port, latency, response)
 	if err != nil {
 		return BasicQueryResponse{}, err
 	}
@@ -112,6 +115,9 @@ type FullQueryResponse struct {
 
 	// Port contains the server's port used for communication.
 	Port uint16
+
+	// Latency contains the duration of time waited for the full query response.
+	Latency time.Duration
 
 	// Description contains the MOTD of the server.
 	Description string
@@ -172,14 +178,14 @@ func FullQuery(server string, port uint16, initialConnectionTimeout time.Duratio
 		return FullQueryResponse{}, err
 	}
 
-	response, err := readQueryResponse(con, ioTimeout)
+	response, latency, err := readQueryResponse(con, ioTimeout)
 	if err != nil {
 		return FullQueryResponse{}, err
 	}
 
 	con.Close()
 
-	fullQuery, err := packageFullQueryResponse(serverIP, port, response)
+	fullQuery, err := packageFullQueryResponse(serverIP, port, latency, response)
 	if err != nil {
 		return FullQueryResponse{}, err
 	}
@@ -227,17 +233,13 @@ func createQueryHandshakePacket(sessionID []byte) []byte {
 
 // readChallengeToken reads and parses the challenge token sent by the server.
 func readChallengeToken(con net.Conn, timeout time.Duration, handshake []byte) ([]byte, error) {
-	timeDeadline := time.Now().Add(timeout)
-	con.SetWriteDeadline(timeDeadline)
-
+	setDeadline(&con, timeout)
 	_, err := con.Write(handshake)
 	if err != nil {
 		return nil, err
 	}
 
-	timeDeadline = time.Now().Add(timeout)
-	con.SetReadDeadline(timeDeadline)
-
+	setDeadline(&con, timeout)
 	potentialChallengeToken := make([]byte, 32)
 
 	numRead, err := con.Read(potentialChallengeToken)
@@ -314,10 +316,9 @@ func cleanChallengeToken(potentialChallengeToken []byte) (string, error) {
 func sendQueryRequest(con net.Conn, timeout time.Duration, sessionID []byte, challengeToken []byte, isFullQuery bool) error {
 	queryRequestPacket := createQueryRequestPacket(sessionID, challengeToken, isFullQuery)
 
-	timeDeadline := time.Now().Add(timeout)
-	con.SetWriteDeadline(timeDeadline)
-
+	setDeadline(&con, timeout)
 	_, err := con.Write(queryRequestPacket)
+
 	return err
 }
 
@@ -335,26 +336,29 @@ func createQueryRequestPacket(sessionID []byte, challengeToken []byte, isFullQue
 	return fullQueryRequestPacket
 }
 
-// readQueryResponse receives the query response.
-func readQueryResponse(con net.Conn, timeout time.Duration) ([]byte, error) {
-	timeDeadline := time.Now().Add(timeout)
-	con.SetReadDeadline(timeDeadline)
-
+// readQueryResponse receives and measures the duration of time waited for the query response.
+func readQueryResponse(con net.Conn, timeout time.Duration) ([]byte, time.Duration, error) {
+	setDeadline(&con, timeout)
 	response := make([]byte, 8192)
+
+	startTime := time.Now()
 	bytesRead, err := con.Read(response)
 	if err != nil {
-		return nil, err
+		return nil, -1, err
 	}
+	latency := time.Since(startTime)
+
 	response = response[0:bytesRead]
 
-	return response, nil
+	return response, latency, nil
 }
 
 // packageBasicQueryResponse parses and packages the response into basicQuery.
-func packageBasicQueryResponse(serverIP string, port uint16, response []byte) (BasicQueryResponse, error) {
+func packageBasicQueryResponse(serverIP string, port uint16, latency time.Duration, response []byte) (BasicQueryResponse, error) {
 	basicQuery := BasicQueryResponse{}
 	basicQuery.IP = serverIP
 	basicQuery.Port = port
+	basicQuery.Latency = latency
 
 	err := parseBasicQueryResponse(response, &basicQuery)
 	if err != nil {
@@ -413,10 +417,11 @@ func parseBasicQueryResponse(response []byte, basicQuery *BasicQueryResponse) er
 }
 
 // packageFullQueryResponse parses and packages the response into fullQuery.
-func packageFullQueryResponse(serverIP string, port uint16, response []byte) (FullQueryResponse, error) {
+func packageFullQueryResponse(serverIP string, port uint16, latency time.Duration, response []byte) (FullQueryResponse, error) {
 	fullQuery := FullQueryResponse{}
 	fullQuery.IP = serverIP
 	fullQuery.Port = port
+	fullQuery.Latency = latency
 
 	// Split the response using the player token into a key value section and a null-terminated string section containing the players online for parsing.
 	splitResponse := bytes.Split(response, playerToken)
