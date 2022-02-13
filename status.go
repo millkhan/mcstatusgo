@@ -36,7 +36,7 @@ var (
 type ErrMissingInformation struct {
 	// Status or Query response.
 	Protocol string
-	// The value that was missing from the response.
+	// The name of the value that was missing from the response.
 	MissingValue string
 }
 
@@ -44,7 +44,7 @@ func (e ErrMissingInformation) Error() string {
 	return fmt.Sprintf("invalid %s response: %s missing from response.", e.Protocol, e.MissingValue)
 }
 
-// StatusResponse contains the information from the server status response.
+// StatusResponse contains the information from the status request.
 type StatusResponse struct {
 	// IP contains the server's IP.
 	IP string
