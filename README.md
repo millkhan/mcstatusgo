@@ -12,7 +12,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/millkhan/mcstatusgo"
+	"github.com/millkhan/mcstatusgo/v2"
 )
 
 func main() {
@@ -58,7 +58,7 @@ https://pkg.go.dev/github.com/millkhan/mcstatusgo
 
 mcstatusgo can be installed easily using the following command:
 ```bash
-go get github.com/millkhan/mcstatusgo
+go get github.com/millkhan/mcstatusgo/v2
 ```
 
 ## License
