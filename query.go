@@ -43,6 +43,7 @@ var (
 )
 
 // BasicQueryResponse contains the information from the basic query request.
+// https://wiki.vg/Query#Response_2
 type BasicQueryResponse struct {
 	// IP contains the server's IP.
 	IP string
@@ -76,6 +77,7 @@ type BasicQueryResponse struct {
 // The Minecraft server must have the "enable-query" property set to true.
 //
 // If a valid response is received, a BasicQueryResponse is returned.
+// https://wiki.vg/Query#Basic_stat
 func BasicQuery(server string, port uint16, initialConnectionTimeout time.Duration, ioTimeout time.Duration) (BasicQueryResponse, error) {
 	serverAndPort := fmt.Sprintf("%s:%d", server, port)
 
@@ -109,6 +111,7 @@ func BasicQuery(server string, port uint16, initialConnectionTimeout time.Durati
 }
 
 // FullQueryResponse contains the information from the full query request.
+// https://wiki.vg/Query#Response_3
 type FullQueryResponse struct {
 	// IP contains the server's IP.
 	IP string
@@ -161,6 +164,7 @@ type FullQueryResponse struct {
 // The Minecraft server must have the "enable-query" property set to true.
 //
 // If a valid response is received, a FullQueryResponse is returned.
+// https://wiki.vg/Query#Full_stat
 func FullQuery(server string, port uint16, initialConnectionTimeout time.Duration, ioTimeout time.Duration) (FullQueryResponse, error) {
 	serverAndPort := fmt.Sprintf("%s:%d", server, port)
 
@@ -212,6 +216,7 @@ func initiateQueryRequest(con net.Conn, timeout time.Duration, isFullQuery bool)
 }
 
 // createSessionID creates a random sessionID for the query request.
+// https://wiki.vg/Query#Generating_a_Session_ID
 func createSessionID() []byte {
 	rand.Seed(time.Now().UnixNano())
 	sessionID := make([]byte, 4)
@@ -223,6 +228,7 @@ func createSessionID() []byte {
 }
 
 // createQueryHandshakePacket crafts the handshake packet used to initiate the request.
+// https://wiki.vg/Query#Handshake
 func createQueryHandshakePacket(sessionID []byte) []byte {
 	handshake := []byte(magicBytes)
 	handshake = append(handshake, handshakeByte)
@@ -323,6 +329,8 @@ func sendQueryRequest(con net.Conn, timeout time.Duration, sessionID []byte, cha
 }
 
 // createQueryRequestPacket uses the information received from the handshake to create the full query request packet.
+// https://wiki.vg/Query#Request_2
+// https://wiki.vg/Query#Request_3
 func createQueryRequestPacket(sessionID []byte, challengeToken []byte, isFullQuery bool) []byte {
 	fullQueryRequestPacket := append(magicBytes, statByte)
 	fullQueryRequestPacket = append(fullQueryRequestPacket, sessionID...)
@@ -453,6 +461,7 @@ func packageFullQueryResponse(serverIP string, port uint16, latency time.Duratio
 }
 
 // parseKeyValueSection parses the key mapped values from the full query response into a JSON []byte.
+// https://wiki.vg/Query#K.2C_V_section
 func parseKeyValueSection(keyValueSection []byte) ([]byte, error) {
 	if len(keyValueSection) < 16 {
 		return nil, ErrShortQueryResponse

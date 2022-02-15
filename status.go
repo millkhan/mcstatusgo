@@ -52,6 +52,7 @@ func (e ErrMissingInformation) Error() string {
 }
 
 // StatusResponse contains the information from the status request.
+// https://wiki.vg/Server_List_Ping#Response
 type StatusResponse struct {
 	// IP contains the server's IP.
 	IP string
@@ -101,6 +102,7 @@ type StatusResponse struct {
 // The Minecraft server must have SLP enabled.
 //
 // If a valid response is received, a StatusResponse is returned.
+// https://wiki.vg/Server_List_Ping
 func Status(server string, port uint16, initialConnectionTimeout time.Duration, ioTimeout time.Duration) (StatusResponse, error) {
 	serverAndPort := fmt.Sprintf("%s:%d", server, port)
 
@@ -141,6 +143,7 @@ func Status(server string, port uint16, initialConnectionTimeout time.Duration, 
 // Ping serves as a convenience wrapper over Status to retrieve the server latency.
 //
 // Retrieving the latency from a StatusResponse provides the same function.
+// https://wiki.vg/Server_List_Ping#Ping
 func Ping(server string, port uint16, initialConnectionTimeout time.Duration, ioTimeout time.Duration) (time.Duration, error) {
 	status, err := Status(server, port, initialConnectionTimeout, ioTimeout)
 	if err != nil {
@@ -175,6 +178,7 @@ func initiateStatusRequest(con net.Conn, timeout time.Duration, server string, p
 }
 
 // createStatusHandshakePacket crafts the handshake packet used to initialize the connection with the server.
+// https://wiki.vg/Server_List_Ping#Handshake
 func createStatusHandshakePacket(server string, port uint16) []byte {
 	handshake := []byte{packetID, protocolVersion}
 	handshake = append(handshake, serverToBytes(server)...)
