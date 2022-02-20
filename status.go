@@ -209,6 +209,7 @@ func portToBytes(port uint16) []byte {
 }
 
 // writeVarInt converts an int into its varint []byte equivalent.
+// https://wiki.vg/Protocol#VarInt_and_VarLong
 func writeVarInt(number int) []byte {
 	varInt := []byte{}
 
@@ -281,6 +282,7 @@ func readResponseSize(con net.Conn, timeout time.Duration) (int, error) {
 }
 
 // readVarInt converts a varint into its int equivalent.
+// https://wiki.vg/Protocol#VarInt_and_VarLong
 func readVarInt(varInt []byte) (int, error) {
 	number := 0
 	bitOffSet := 0

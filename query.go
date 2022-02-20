@@ -329,8 +329,8 @@ func sendQueryRequest(con net.Conn, timeout time.Duration, sessionID []byte, cha
 }
 
 // createQueryRequestPacket uses the information received from the handshake to create the full query request packet.
-// https://wiki.vg/Query#Request_2
-// https://wiki.vg/Query#Request_3
+// https://wiki.vg/Query#Request_2 (basic query).
+// https://wiki.vg/Query#Request_3 (full query).
 func createQueryRequestPacket(sessionID []byte, challengeToken []byte, isFullQuery bool) []byte {
 	fullQueryRequestPacket := append(magicBytes, statByte)
 	fullQueryRequestPacket = append(fullQueryRequestPacket, sessionID...)
