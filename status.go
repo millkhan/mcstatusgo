@@ -39,9 +39,9 @@ var (
 	ErrInvalidPong error = errors.New("invalid status response: pong sent by server does not match ping packet")
 )
 
-// ErrMissingInformation is used by both protocols and contains the specific value left out from the response.
+// ErrMissingInformation is returned when expected values are not receieved. 
 type ErrMissingInformation struct {
-	// Status or Query response.
+	// "status" or "query".
 	Protocol string
 	// The name of the value that was missing from the response.
 	MissingValue string
