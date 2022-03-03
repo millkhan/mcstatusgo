@@ -245,8 +245,8 @@ func readChallengeToken(con net.Conn, timeout time.Duration, handshake []byte) (
 		return nil, err
 	}
 
-	setDeadline(&con, timeout)
 	potentialChallengeToken := make([]byte, 32)
+	setDeadline(&con, timeout)
 
 	numRead, err := con.Read(potentialChallengeToken)
 	if err != nil {
@@ -346,8 +346,8 @@ func createQueryRequestPacket(sessionID []byte, challengeToken []byte, isFullQue
 
 // readQueryResponse receives and measures the duration of time waited for the query response.
 func readQueryResponse(con net.Conn, timeout time.Duration) ([]byte, time.Duration, error) {
-	setDeadline(&con, timeout)
 	response := make([]byte, 8192)
+	setDeadline(&con, timeout)
 
 	startTime := time.Now()
 	bytesRead, err := con.Read(response)
