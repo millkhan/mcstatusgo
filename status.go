@@ -234,7 +234,7 @@ func writeVarInt(number int) []byte {
 
 // readStatusResponse receives the full status response from the server.
 func readStatusResponse(con net.Conn, timeout time.Duration) ([]byte, error) {
-	responseSize, err := readResponseSize(con, timeout)
+	responseSize, err := readStatusResponseSize(con, timeout)
 	if err != nil {
 		return nil, err
 	}
@@ -258,7 +258,7 @@ func readStatusResponse(con net.Conn, timeout time.Duration) ([]byte, error) {
 }
 
 // readResponseSize reads and parses the varint that prepends the server's response which contains the length of the response.
-func readResponseSize(con net.Conn, timeout time.Duration) (int, error) {
+func readStatusResponseSize(con net.Conn, timeout time.Duration) (int, error) {
 	varInt := []byte{}
 
 	setDeadline(&con, timeout)
@@ -311,8 +311,8 @@ func calculateLatency(con net.Conn, timeout time.Duration) (time.Duration, error
 		return -1, err
 	}
 
-	setDeadline(&con, timeout)
 	pong := make([]byte, 10)
+	setDeadline(&con, timeout)
 
 	startTime := time.Now()
 	_, err = con.Read(pong)
