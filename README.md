@@ -1,10 +1,15 @@
 # mcstatusgo
 `mcstatusgo` is a pure Go Minecraft service status checker for Java Edition Minecraft servers.
 
-`mcstatusgo` supports requesting information through four main functions: `status`, `ping`, `basic query`, and `full query`.
+`mcstatusgo` supports requesting information through five protocols: `status`, `legacy status`, `ping`, `basic query`, and `full query`.
+
+`status`, `ping`, `basic query`, and `full query` are the most up-to-date protocols.
+
+`legacy status` is an older implementation of `status`.
 
 ## Usage
 
+#### Current Protocols
 ```go
 package main
 
@@ -39,7 +44,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	fmt.Printf("Map Name: %s\n", basicQuery.MapName)
+	fmt.Printf("Map name: %s\n", basicQuery.MapName)
 
 	// https://wiki.vg/Query#Full_stat
 	fullQuery, err := mcstatusgo.FullQuery("mc.piglin.org", 25565, initialTimeout, ioTimeout)
@@ -47,6 +52,31 @@ func main() {
 		panic(err)
 	}
 	fmt.Printf("Server version: %s\n", fullQuery.Version.Name)
+}
+```
+
+#### Older Protocols
+```go
+package main
+
+import (
+	"fmt"
+	"time"
+
+	"github.com/millkhan/mcstatusgo/v2"
+)
+
+func main() {
+	// Experiment with both the initialTimeout and ioTimeout values to see what works best.
+	initialTimeout := time.Second * 10
+	ioTimeout := time.Second * 5
+
+	// https://wiki.vg/Server_List_Ping#1.6
+	statusLegacy, err := mcstatusgo.StatusLegacy("us.mineplex.com", 25565, initialTimeout, ioTimeout)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Printf("Max player count: %d\n", statusLegacy.Players.Max)
 }
 ```
 
