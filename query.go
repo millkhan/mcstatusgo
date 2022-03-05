@@ -409,19 +409,29 @@ func parseBasicQueryResponse(response []byte, basicQuery *BasicQueryResponse) er
 	basicQuery.MapName = string(responseSlice[2])
 
 	// Convert and package the int values.
-	playersOnline, err := strconv.ParseInt(responseSlice[3], 10, 32)
+	playersOnline, err := stringToInt(responseSlice[3])
 	if err != nil {
 		return err
 	}
-	basicQuery.Players.Online = int(playersOnline)
+	basicQuery.Players.Online = playersOnline
 
-	playersMax, err := strconv.ParseInt(responseSlice[4], 10, 32)
+	playersMax, err := stringToInt(responseSlice[4])
 	if err != nil {
 		return err
 	}
-	basicQuery.Players.Max = int(playersMax)
+	basicQuery.Players.Max = playersMax
 
 	return nil
+}
+
+// stringToInt simply parses an int contained within a string and returns that value.
+func stringToInt(numString string) (int, error) {
+	num, err := strconv.ParseInt(numString, 10, 32)
+	if err != nil {
+		return -1, err
+	}
+
+	return int(num), nil
 }
 
 // packageFullQueryResponse parses and packages the response into fullQuery.
