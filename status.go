@@ -13,24 +13,24 @@ import (
 
 const (
 	// packetID identifies the crafted packet as a status packet.
-	packetID byte = 0
+	packetID byte = 0x00
 	// protocolVersion identifies the client's version of Minecraft (can be any valid protocol version).
-	protocolVersion byte = 47
+	protocolVersion byte = 0x2F
 	// nextState is attached to the end of the handshake packet to signal a request for a status response from the server.
-	nextState byte = 1
+	nextState byte = 0x01
 )
 
 var (
-	// requestPacket is the packet sent after the handshake to elicit a status response from the server.
-	requestPacket []byte = []byte{nextState, packetID}
+	// statusRequestPacket is the packet sent after the handshake to elicit a status response from the server.
+	statusRequestPacket []byte = []byte{nextState, packetID}
 	// pingPacket is sent to elicit an identical pong from the server to calculate latency.
-	pingPacket []byte = []byte{9, 1, 7, 7, 7, 7, 7, 7, 7, 7}
+	pingPacket []byte = []byte{0x09, 0x01, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07}
 )
 
 // Errors.
 var (
 	// ErrShortStatusResponse is returned when the received response is too small to contain valid data.
-	ErrShortStatusResponse error = errors.New("invalid status response: response is too small")
+	ErrShortStatusResponse error = errors.New("invalid status response: response is too small to contain valid data")
 	// ErrInvalidSizeInfo is returned when the information containing the JSON length does not match the actual JSON length.
 	ErrInvalidSizeInfo error = errors.New("invalid status response: JSON size information is invalid")
 	// ErrLargeVarInt is returned when a varint sent by the server is above the 5 bytes size limit.
@@ -169,7 +169,7 @@ func setDeadline(con *net.Conn, timeout time.Duration) {
 // initiateStatusRequest handles sending the handshake and request packets.
 func initiateStatusRequest(con net.Conn, timeout time.Duration, server string, port uint16) error {
 	handshake := createStatusHandshakePacket(server, port)
-	completedRequestPacket := append(handshake, requestPacket...)
+	completedRequestPacket := append(handshake, statusRequestPacket...)
 
 	setDeadline(&con, timeout)
 	_, err := con.Write(completedRequestPacket)

@@ -16,26 +16,26 @@ import (
 
 const (
 	// handshakeByte identifies the crafted packet as a handshake packet.
-	handshakeByte byte = 9
+	handshakeByte byte = 0x09
 	// statByte identifies the packet as a request for query information.
-	statByte byte = 0
+	statByte byte = 0x00
 )
 
 var (
 	// magicBytes must prepend every message sent to the server.
 	magicBytes []byte = []byte{0xFE, 0xFD}
 	// fullQueryPadding is added at the end of the request packet to indicate a request for full query information.
-	fullQueryPadding []byte = []byte{0, 0, 0, 0}
+	fullQueryPadding []byte = []byte{0x00, 0x00, 0x00, 0x00}
 	// playerSplit is the token used to split the full query response into two parts for parsing.
-	playerToken []byte = []byte{0, 1, 112, 108, 97, 121, 101, 114, 95, 0, 0}
+	playerToken []byte = []byte{0x00, 0x01, 0x70, 0x6C, 0x61, 0x79, 0x65, 0x72, 0x5F, 0x00, 0x00}
 )
 
 // Errors.
 var (
 	// ErrShortQueryResponse is returned when the received response is too small to contain valid data.
-	ErrShortQueryResponse error = errors.New("invalid query response: response is too small")
+	ErrShortQueryResponse error = errors.New("invalid query response: response is too small to contain valid data")
 	// ErrShortChallengeToken is returned when the received challenge token is too small to be valid.
-	ErrShortChallengeToken error = errors.New("invalid query response: challenge token is too small")
+	ErrShortChallengeToken error = errors.New("invalid query response: challenge token is too small to contain valid data")
 	// ErrAbsentChallengeTokenNullTerminator is returned when the challenge token doesn't contain a null-terminator at the end.
 	ErrAbsentChallengeTokenNullTerminator = errors.New("invalid query response: challenge token doesn't contain a null-terminator")
 	// ErrAbsentPlayerToken is returned when the player token used to split the full query response into two parts for parsing isn't present.
@@ -248,11 +248,11 @@ func readChallengeToken(con net.Conn, timeout time.Duration, handshake []byte) (
 	potentialChallengeToken := make([]byte, 32)
 	setDeadline(&con, timeout)
 
-	numRead, err := con.Read(potentialChallengeToken)
+	bytesRead, err := con.Read(potentialChallengeToken)
 	if err != nil {
 		return nil, err
 	}
-	potentialChallengeToken = potentialChallengeToken[0:numRead]
+	potentialChallengeToken = potentialChallengeToken[0:bytesRead]
 
 	challengeToken, err := parseChallengeToken(potentialChallengeToken)
 	if err != nil {
@@ -277,7 +277,7 @@ func parseChallengeToken(potentialChallengeToken []byte) ([]byte, error) {
 		isNegativeChallengeToken = true
 	}
 
-	challengeTokenInt, err := strconv.ParseInt(challengeTokenString, 10, 32)
+	challengeTokenInt, err := stringToInt(challengeTokenString)
 	if err != nil {
 		return []byte{}, err
 	}
