@@ -39,7 +39,7 @@ var (
 	ErrInvalidPong error = errors.New("invalid status response: pong sent by server does not match ping packet")
 )
 
-// ErrMissingInformation is returned when expected values are not receieved. 
+// ErrMissingInformation is returned when expected values are not receieved.
 type ErrMissingInformation struct {
 	// "status" or "query".
 	Protocol string
@@ -113,6 +113,7 @@ func Status(server string, port uint16, initialConnectionTimeout time.Duration, 
 	// If the connection closes normally, this line will run but not do anything.
 	defer resetConnection(con)
 
+	// Split the string "IP:PORT" by : to get the IP of the remote host.
 	serverIP := strings.Split(con.RemoteAddr().String(), ":")[0]
 
 	err = initiateStatusRequest(con, ioTimeout, server, port)

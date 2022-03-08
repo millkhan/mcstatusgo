@@ -71,6 +71,7 @@ func StatusLegacy(server string, port uint16, initialConnectionTimeout time.Dura
 	// If the connection closes normally, this line will run but not do anything.
 	defer resetConnection(con)
 
+	// Split the string "IP:PORT" by : to get the IP of the remote host.
 	serverIP := strings.Split(con.RemoteAddr().String(), ":")[0]
 
 	err = initiateLegacyStatusRequest(con, ioTimeout)

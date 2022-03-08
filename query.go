@@ -88,6 +88,7 @@ func BasicQuery(server string, port uint16, initialConnectionTimeout time.Durati
 	// If the connection closes normally, this line will run but not do anything.
 	defer con.Close()
 
+	// Split the string "IP:PORT" by : to get the IP of the remote host.
 	serverIP := strings.Split(con.RemoteAddr().String(), ":")[0]
 
 	err = initiateQueryRequest(con, ioTimeout, false)
@@ -175,6 +176,7 @@ func FullQuery(server string, port uint16, initialConnectionTimeout time.Duratio
 	// If the connection closes normally, this line will run but not do anything.
 	defer con.Close()
 
+	// Split the string "IP:PORT" by : to get the IP of the remote host.
 	serverIP := strings.Split(con.RemoteAddr().String(), ":")[0]
 
 	err = initiateQueryRequest(con, ioTimeout, true)
