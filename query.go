@@ -266,7 +266,7 @@ func readChallengeToken(con net.Conn, timeout time.Duration, handshake []byte) (
 func parseChallengeToken(potentialChallengeToken []byte) ([]byte, error) {
 	challengeTokenString, err := cleanChallengeToken(potentialChallengeToken)
 	if err != nil {
-		return []byte{}, err
+		return nil, err
 	}
 
 	var isNegativeChallengeToken bool
@@ -279,7 +279,7 @@ func parseChallengeToken(potentialChallengeToken []byte) ([]byte, error) {
 
 	challengeTokenInt, err := stringToInt(challengeTokenString)
 	if err != nil {
-		return []byte{}, err
+		return nil, err
 	}
 
 	// Make challenge token negative.
