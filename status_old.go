@@ -1,6 +1,7 @@
 package mcstatusgo
 
 import (
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"net"
@@ -9,6 +10,8 @@ import (
 )
 
 // This file contains all older implementations of the status protocol.
+
+/* Status Legacy */
 
 var (
 	// legacyRequestPacket is the packet sent to elicit a legacy status response from the server.
@@ -197,4 +200,113 @@ func packageLegacyStatusValues(responseList []string, statusLegacy *StatusLegacy
 	statusLegacy.Players.Max = playersMax
 
 	return nil
+}
+
+/* Status Beta */
+
+const (
+	// betaRequestPacket is the packet sent to elicit a beta status response from the server.
+	betaRequestPacket byte = 0xFE
+)
+
+// StatusBetaResponse contains the information from the beta status request.
+type StatusBetaResponse struct {
+	// IP contains the server's IP.
+	IP string
+
+	// Port contains the server's port used for communication.
+	Port uint16
+
+	// Latency contains the duration of time waited for the response.
+	Latency time.Duration
+
+	// Description contains the MOTD of the server.
+	Description string
+
+	Players struct {
+		// Max contains the maximum number of players the server supports.
+		Max int
+
+		// Online contains the current number of players on the server.
+		Online int
+	}
+}
+
+// StatusBeta requests basic server information from a Minecraft server using the beta (oldest version) implementation of Status.
+//
+// The Minecraft server must have SLP enabled.
+//
+// If a valid response is received, a StatusBetaResponse is returned.
+// https://wiki.vg/Server_List_Ping#Beta_1.8_to_1.3
+func StatusBeta(server string, port uint16, initialConnectionTimeout time.Duration, ioTimeout time.Duration) (StatusBetaResponse, error) {
+	serverAndPort := fmt.Sprintf("%s:%d", server, port)
+
+	con, err := net.DialTimeout("tcp", serverAndPort, initialConnectionTimeout)
+	if err != nil {
+		return StatusBetaResponse{}, err
+	}
+	// If the connection closes normally, this line will run but not do anything.
+	defer resetConnection(con)
+
+	// Split the string "IP:PORT" by : to get the IP of the remote host.
+	// serverIP := strings.Split(con.RemoteAddr().String(), ":")[0]
+
+	err = initiateRequest(con, ioTimeout, []byte{betaRequestPacket})
+	if err != nil {
+		return StatusBetaResponse{}, err
+	}
+
+	_, err = readBetaStatusResponse(con, ioTimeout)
+	if err != nil {
+		return StatusBetaResponse{}, err
+	}
+
+	con.Close()
+
+	// Process received response here
+
+	return StatusBetaResponse{}, nil
+}
+
+// readStatusResponse receives the full status response from the server.
+func readBetaStatusResponse(con net.Conn, timeout time.Duration) ([]byte, error) {
+	responseSize, err := readBetaStatusResponseSize(con, timeout)
+	if err != nil {
+		return nil, err
+	}
+
+	response := []byte{}
+
+	// Keep receiving bytes until the full message is received.
+	setDeadline(&con, timeout)
+	for len(response) < responseSize {
+		recvBuffer := make([]byte, 32)
+		bytesRead, err := con.Read(recvBuffer)
+
+		if err != nil {
+			return nil, err
+		}
+
+		response = append(response, recvBuffer[0:bytesRead]...)
+	}
+
+	return response, nil
+}
+
+// readBetaStatusResponseSize reads and parses the short that prepends the server's response which contains the length of the response.
+func readBetaStatusResponseSize(con net.Conn, timeout time.Duration) (int, error) {
+	response := make([]byte, 3)
+
+	_, err := con.Read(response)
+	if err != nil {
+		return -1, err
+	}
+
+	// Remove the kick packet from the front.
+	response = response[1:]
+
+	// For unknown reasons (most likely due to encoding), the response size must be multiplied by 2 to contain the actual response length.
+	responseSize := int(binary.BigEndian.Uint16(response)) * 2
+
+	return responseSize, nil
 }
