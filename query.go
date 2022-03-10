@@ -209,12 +209,10 @@ func initiateQueryRequest(con net.Conn, timeout time.Duration, isFullQuery bool)
 		return err
 	}
 
-	err = sendQueryRequest(con, timeout, sessionID, challengeToken, isFullQuery)
-	if err != nil {
-		return err
-	}
+	queryRequestPacket := createQueryRequestPacket(sessionID, challengeToken, isFullQuery)
+	err = initiateRequest(con, timeout, queryRequestPacket)
 
-	return nil
+	return err
 }
 
 // createSessionID creates a random sessionID for the query request.
@@ -318,16 +316,6 @@ func cleanChallengeToken(potentialChallengeToken []byte) (string, error) {
 	}
 
 	return string(cleanedToken), nil
-}
-
-// sendQueryRequest sends the query request packet to the server.
-func sendQueryRequest(con net.Conn, timeout time.Duration, sessionID []byte, challengeToken []byte, isFullQuery bool) error {
-	queryRequestPacket := createQueryRequestPacket(sessionID, challengeToken, isFullQuery)
-
-	setDeadline(&con, timeout)
-	_, err := con.Write(queryRequestPacket)
-
-	return err
 }
 
 // createQueryRequestPacket uses the information received from the handshake to create the full query request packet.

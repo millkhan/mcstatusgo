@@ -74,7 +74,7 @@ func StatusLegacy(server string, port uint16, initialConnectionTimeout time.Dura
 	// Split the string "IP:PORT" by : to get the IP of the remote host.
 	serverIP := strings.Split(con.RemoteAddr().String(), ":")[0]
 
-	err = initiateLegacyStatusRequest(con, ioTimeout)
+	err = initiateRequest(con, ioTimeout, legacyRequestPacket)
 	if err != nil {
 		return StatusLegacyResponse{}, err
 	}
@@ -92,14 +92,6 @@ func StatusLegacy(server string, port uint16, initialConnectionTimeout time.Dura
 	}
 
 	return statusLegacy, nil
-}
-
-// initiateLegacyStatusRequest handles sending the handshake packet.
-func initiateLegacyStatusRequest(con net.Conn, timeout time.Duration) error {
-	setDeadline(&con, timeout)
-	_, err := con.Write(legacyRequestPacket)
-
-	return err
 }
 
 // readLegacyStatusResponse receives the full legacy status response from the server.

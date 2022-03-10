@@ -161,10 +161,18 @@ func resetConnection(con net.Conn) {
 	TCPCon.Close()
 }
 
-// setDeadline is used by both protocols for setting the deadline (duration waited) for io operations.
+// setDeadline is used by all protocols for setting the deadline (duration waited) for io operations.
 func setDeadline(con *net.Conn, timeout time.Duration) {
 	timeDeadline := time.Now().Add(timeout)
 	(*con).SetDeadline(timeDeadline)
+}
+
+// initiateRequest is used by all protocols for sending request packets to elicit the desired response from the server.
+func initiateRequest(con net.Conn, timeout time.Duration, requestPacket []byte) error {
+	setDeadline(&con, timeout)
+	_, err := con.Write(requestPacket)
+
+	return err
 }
 
 // initiateStatusRequest handles sending the handshake and request packets.
@@ -172,8 +180,7 @@ func initiateStatusRequest(con net.Conn, timeout time.Duration, server string, p
 	handshake := createStatusHandshakePacket(server, port)
 	completedRequestPacket := append(handshake, statusRequestPacket...)
 
-	setDeadline(&con, timeout)
-	_, err := con.Write(completedRequestPacket)
+	err := initiateRequest(con, timeout, completedRequestPacket)
 
 	return err
 }
