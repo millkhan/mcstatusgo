@@ -1,6 +1,7 @@
 package mcstatusgo
 
 import (
+	"bytes"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -207,6 +208,14 @@ func packageLegacyStatusValues(responseList []string, statusLegacy *StatusLegacy
 const (
 	// betaRequestPacket is the packet sent to elicit a beta status response from the server.
 	betaRequestPacket byte = 0xFE
+    // betaValueSplit contains the value that each value is separated with in the response byte string.
+    betaValueSplit byte = 0xA7
+)
+
+// Errors.
+var (
+	// ErrStatusBetaMissingInformation is returned when the received response doesn't contain all 3 expected values.
+	ErrStatusBetaMissingInformation error = errors.New("invalid status beta response: response doesn't contain all 3 expected values")
 )
 
 // StatusBetaResponse contains the information from the beta status request.
@@ -249,48 +258,53 @@ func StatusBeta(server string, port uint16, initialConnectionTimeout time.Durati
 	defer resetConnection(con)
 
 	// Split the string "IP:PORT" by : to get the IP of the remote host.
-	// serverIP := strings.Split(con.RemoteAddr().String(), ":")[0]
+	serverIP := strings.Split(con.RemoteAddr().String(), ":")[0]
 
 	err = initiateRequest(con, ioTimeout, []byte{betaRequestPacket})
 	if err != nil {
 		return StatusBetaResponse{}, err
 	}
 
-	_, err = readBetaStatusResponse(con, ioTimeout)
+	response, latency, err := readBetaStatusResponse(con, ioTimeout)
 	if err != nil {
 		return StatusBetaResponse{}, err
 	}
 
 	con.Close()
 
-	// Process received response here
+    statusBeta, err := packageBetaStatusResponse(serverIP, port, latency, response)
+	if err != nil {
+		return StatusBetaResponse{}, err
+	}
 
-	return StatusBetaResponse{}, nil
+	return statusBeta, nil
 }
 
-// readStatusResponse receives the full status response from the server.
-func readBetaStatusResponse(con net.Conn, timeout time.Duration) ([]byte, error) {
+// readBetaStatusResponse receives the full beta status response from the server.
+func readBetaStatusResponse(con net.Conn, timeout time.Duration) ([]byte, time.Duration, error) {
 	responseSize, err := readBetaStatusResponseSize(con, timeout)
 	if err != nil {
-		return nil, err
+		return nil, -1, err
 	}
 
 	response := []byte{}
 
 	// Keep receiving bytes until the full message is received.
 	setDeadline(&con, timeout)
+	startTime := time.Now()
 	for len(response) < responseSize {
 		recvBuffer := make([]byte, 32)
 		bytesRead, err := con.Read(recvBuffer)
 
 		if err != nil {
-			return nil, err
+			return nil, -1, err
 		}
 
 		response = append(response, recvBuffer[0:bytesRead]...)
 	}
+    latency := time.Since(startTime)
 
-	return response, nil
+	return response, latency, nil
 }
 
 // readBetaStatusResponseSize reads and parses the short that prepends the server's response which contains the length of the response.
@@ -309,4 +323,61 @@ func readBetaStatusResponseSize(con net.Conn, timeout time.Duration) (int, error
 	responseSize := int(binary.BigEndian.Uint16(response)) * 2
 
 	return responseSize, nil
+}
+
+// packageBetaStatusResponse parses and packages the response into statusBeta.
+func packageBetaStatusResponse(serverIP string, port uint16, latency time.Duration, response []byte) (StatusBetaResponse, error) {
+    statusBeta := StatusBetaResponse{}
+	statusBeta.IP = serverIP
+	statusBeta.Port = port
+	statusBeta.Latency = latency
+
+	responseValues := parseBetaStatusResponse(response)
+
+    err := packageBetaStatusResponseValues(responseValues, &statusBeta)
+    if err != nil {
+        return StatusBetaResponse{}, err
+    }
+
+    return statusBeta, nil
+}
+
+// parseBetaStatusResponse parses the 0xA7 terminated byte string into a []string.
+func parseBetaStatusResponse(response []byte) []string {
+    // Split all the 0xA7 separated values.
+    valueSplit := bytes.Split(response, []byte{betaValueSplit})
+
+    // Remove all 0x00 null characters from the values.
+    responseList := []string{}
+    for _, value := range valueSplit {
+        cleanedValue := string(bytes.ReplaceAll(value, []byte{0x00}, []byte{}))
+        responseList = append(responseList, cleanedValue)
+    }
+
+    return responseList
+}
+
+// packageBetaStatusResponseValues takes responseList and parses and packages the values into statusBeta.
+func packageBetaStatusResponseValues(responseList []string, statusBeta *StatusBetaResponse) error {
+    if len(responseList) < 3 {
+		return ErrStatusBetaMissingInformation
+	}
+
+    // Package the string values.
+	statusBeta.Description = responseList[0]
+
+    // Convert and package the int values.
+	playersOnline, err := stringToInt(responseList[1])
+	if err != nil {
+		return err
+	}
+	statusBeta.Players.Online = playersOnline
+
+	playersMax, err := stringToInt(responseList[2])
+	if err != nil {
+		return err
+	}
+	statusBeta.Players.Max = playersMax
+
+	return nil
 }
