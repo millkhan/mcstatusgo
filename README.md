@@ -30,7 +30,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	fmt.Printf("Player count: %d\n", status.Players.Max)
+	fmt.Printf("Max player count: %d\n", status.Players.Max)
 
 	// https://wiki.vg/Server_List_Ping#Ping
 	ping, err := mcstatusgo.Ping("mc.piglin.org", 25565, initialTimeout, ioTimeout)
@@ -77,6 +77,13 @@ func main() {
 		panic(err)
 	}
 	fmt.Printf("Max player count: %d\n", statusLegacy.Players.Max)
+
+    // https://wiki.vg/Server_List_Ping#Beta_1.8_to_1.3
+	statusBeta, err := mcstatusgo.StatusBeta("us.mineplex.com", 25565, initialTimeout, ioTimeout)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Printf("Online player count: %d\n", statusBeta.Players.Online)
 }
 ```
 
