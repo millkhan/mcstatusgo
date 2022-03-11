@@ -1,11 +1,11 @@
 # mcstatusgo
 `mcstatusgo` is a pure Go Minecraft service status checker for Java Edition Minecraft servers.
 
-`mcstatusgo` supports requesting information through five protocols: `status`, `legacy status`, `ping`, `basic query`, and `full query`.
+`mcstatusgo` supports requesting information through six protocols: `status`, `legacy status`, `beta status`, `ping`, `basic query`, and `full query`.
 
 `status`, `ping`, `basic query`, and `full query` are the most up-to-date protocols.
 
-`legacy status` is an older implementation of `status`.
+`legacy status` and `beta status` are older implementations of `status` used in older versions of Minecraft.
 
 ## Usage
 
@@ -78,7 +78,7 @@ func main() {
 	}
 	fmt.Printf("Max player count: %d\n", statusLegacy.Players.Max)
 
-    // https://wiki.vg/Server_List_Ping#Beta_1.8_to_1.3
+	// https://wiki.vg/Server_List_Ping#Beta_1.8_to_1.3
 	statusBeta, err := mcstatusgo.StatusBeta("us.mineplex.com", 25565, initialTimeout, ioTimeout)
 	if err != nil {
 		panic(err)
