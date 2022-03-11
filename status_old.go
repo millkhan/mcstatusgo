@@ -208,8 +208,8 @@ func packageLegacyStatusValues(responseList []string, statusLegacy *StatusLegacy
 const (
 	// betaRequestPacket is the packet sent to elicit a beta status response from the server.
 	betaRequestPacket byte = 0xFE
-    // betaValueSplit contains the value that each value is separated with in the response byte string.
-    betaValueSplit byte = 0xA7
+	// betaValueSplit contains the value that each value is separated with in the response byte string.
+	betaValueSplit byte = 0xA7
 )
 
 // Errors.
@@ -272,7 +272,7 @@ func StatusBeta(server string, port uint16, initialConnectionTimeout time.Durati
 
 	con.Close()
 
-    statusBeta, err := packageBetaStatusResponse(serverIP, port, latency, response)
+	statusBeta, err := packageBetaStatusResponse(serverIP, port, latency, response)
 	if err != nil {
 		return StatusBetaResponse{}, err
 	}
@@ -302,7 +302,7 @@ func readBetaStatusResponse(con net.Conn, timeout time.Duration) ([]byte, time.D
 
 		response = append(response, recvBuffer[0:bytesRead]...)
 	}
-    latency := time.Since(startTime)
+	latency := time.Since(startTime)
 
 	return response, latency, nil
 }
@@ -327,46 +327,46 @@ func readBetaStatusResponseSize(con net.Conn, timeout time.Duration) (int, error
 
 // packageBetaStatusResponse parses and packages the response into statusBeta.
 func packageBetaStatusResponse(serverIP string, port uint16, latency time.Duration, response []byte) (StatusBetaResponse, error) {
-    statusBeta := StatusBetaResponse{}
+	statusBeta := StatusBetaResponse{}
 	statusBeta.IP = serverIP
 	statusBeta.Port = port
 	statusBeta.Latency = latency
 
 	responseValues := parseBetaStatusResponse(response)
 
-    err := packageBetaStatusResponseValues(responseValues, &statusBeta)
-    if err != nil {
-        return StatusBetaResponse{}, err
-    }
+	err := packageBetaStatusResponseValues(responseValues, &statusBeta)
+	if err != nil {
+		return StatusBetaResponse{}, err
+	}
 
-    return statusBeta, nil
+	return statusBeta, nil
 }
 
 // parseBetaStatusResponse parses the 0xA7 terminated byte string into a []string.
 func parseBetaStatusResponse(response []byte) []string {
-    // Split all the 0xA7 separated values.
-    valueSplit := bytes.Split(response, []byte{betaValueSplit})
+	// Split all the 0xA7 separated values.
+	valueSplit := bytes.Split(response, []byte{betaValueSplit})
 
-    // Remove all 0x00 null characters from the values.
-    responseList := []string{}
-    for _, value := range valueSplit {
-        cleanedValue := string(bytes.ReplaceAll(value, []byte{0x00}, []byte{}))
-        responseList = append(responseList, cleanedValue)
-    }
+	// Remove all 0x00 null characters from the values.
+	responseList := []string{}
+	for _, value := range valueSplit {
+		cleanedValue := string(bytes.ReplaceAll(value, []byte{0x00}, []byte{}))
+		responseList = append(responseList, cleanedValue)
+	}
 
-    return responseList
+	return responseList
 }
 
 // packageBetaStatusResponseValues takes responseList and parses and packages the values into statusBeta.
 func packageBetaStatusResponseValues(responseList []string, statusBeta *StatusBetaResponse) error {
-    if len(responseList) < 3 {
+	if len(responseList) < 3 {
 		return ErrStatusBetaMissingInformation
 	}
 
-    // Package the string values.
+	// Package the string values.
 	statusBeta.Description = responseList[0]
 
-    // Convert and package the int values.
+	// Convert and package the int values.
 	playersOnline, err := stringToInt(responseList[1])
 	if err != nil {
 		return err
